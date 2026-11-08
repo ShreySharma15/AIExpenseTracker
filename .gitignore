@@ -1,0 +1,34 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.vercel/
+.supabase/
+supabase/.temp/
+supabase/.branches/
+
+# Dependencies, builds, and tests
+node_modules/
+.next/
+out/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+*.log
+
+# Private user data and local exports
+private/
+backups/
+uploads/
+*.dump
+
+# Editor and operating system
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
