@@ -94,18 +94,13 @@ Privacy limitation: Google's unpaid-service terms allow submitted content and re
 
 References: [API key/project setup](https://ai.google.dev/gemini-api/docs/api-key), [pricing](https://ai.google.dev/gemini-api/docs/pricing), [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits), [unpaid-service terms](https://ai.google.dev/gemini-api/terms), and [model lifecycle](https://ai.google.dev/gemini-api/docs/deprecations).
 
-## 5. GitHub — before remote version control
+## 5. GitHub
 
-1. Open [Create repository](https://github.com/new) and sign in.
-2. Name it **personal-ai-expense-tracker** and select **Private**.
-3. Leave initialization with README, .gitignore, and license unchecked because this workspace already contains planning files.
-4. Click **Create repository** and retain the repository URL. No GitHub token is needed in .env.local.
-
-Verification: the repository page shows **Private**. Share only the repository URL when ready. The agent will initialize local Git, check ignored secrets, connect the remote, and use Git Credential Manager/browser authentication if needed. Never paste an access token into chat. Follow [GitHub's repository creation guide](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository).
+The owner approved public visibility for [ShreySharma15/AIExpenseTracker](https://github.com/ShreySharma15/AIExpenseTracker). Before pushing to `main`, check the staged files and outgoing history for credentials, direct email addresses, environment files, and financial records. Use the repository-local GitHub noreply address. Keep live secrets in the ignored local environment file, Vercel Production, and Supabase Vault.
 
 ## 6. Deploy from GitHub to Vercel
 
-1. After the verified push, sign in at [Vercel](https://vercel.com/) using GitHub. Open **Add New → Project**. Select **Import** next to the private **ShreySharma15/AIExpenseTracker** repository. If it is missing, select **Adjust GitHub App Permissions** and grant the Vercel app access to this repository.
+1. After the verified push, sign in at [Vercel](https://vercel.com/) using GitHub. Open **Add New → Project**. Select **Import** next to **ShreySharma15/AIExpenseTracker**. If it is missing, select **Adjust GitHub App Permissions** and grant the Vercel app access to this repository.
 2. Select the **Next.js** preset and the repository root. Keep the default install, build, and output settings. In **Settings → Git**, verify the production branch is `main`. Use a Node.js version supported by Vercel that satisfies `package.json`.
 3. In **Environment Variables**, add these names for **Production** only. Copy the corresponding local values through the dashboard and mark server credentials sensitive where available.
 
@@ -133,6 +128,29 @@ Apply [the recovery migration](../supabase/migrations/202611080003_telegram_reco
 3. In **SQL Editor → New query**, run [schedule-telegram-recovery.sql](../supabase/ops/schedule-telegram-recovery.sql). It registers a one-minute job. The file refers to Vault names only.
 4. In **Integrations → Cron**, inspect runs of `expense-tracker-telegram-recovery`. Also verify the HTTP result in `net._http_response`. A successful cron run confirms only that the HTTP request was queued.
 5. Send a synthetic Telegram expense after registering the webhook and verify one ledger entry. To inspect failed work without revealing payloads, use `select stage, count(*) from public.telegram_jobs group by stage;` in SQL Editor. Terminal rows hold only job metadata. A failed job can represent a delivered ledger write whose Telegram confirmation failed, so check the dashboard before resending.
+
+To verify the schedule and destination without exposing Vault values, run these read-only checks in SQL Editor:
+
+```sql
+select jobname, schedule, active
+from cron.job
+where jobname = 'expense-tracker-telegram-recovery';
+
+select exists (
+  select 1 from vault.decrypted_secrets
+  where name = 'expense_tracker_recovery_url'
+    and decrypted_secret =
+      'https://expensetracker-psi-bay.vercel.app/api/internal/recovery'
+) as production_url_matches;
+
+select created, status_code, timed_out
+from net._http_response
+where created > now() - interval '10 minutes'
+  and content ~ '^\{"processed":[0-9]+,"failed":[0-9]+\}$'
+order by created desc limit 5;
+```
+
+Look for an active one-minute job, `production_url_matches = true`, and recent HTTP 200 responses. To test actual recovery, enqueue a synthetic update without calling either HTTP endpoint, wait for its job to reach `done`, then verify the synthetic ledger entry or AI draft.
 
 See [Supabase Cron](https://supabase.com/docs/guides/cron) and [scheduled HTTP calls with Vault](https://supabase.com/docs/guides/functions/schedule-functions).
 
@@ -162,4 +180,4 @@ The local configuration is verified with npm run verify:setup. Report whether si
 4. For Telegram delivery, deploy to your Vercel production URL with the production environment values, including the same webhook secret generated locally. Then run `node scripts/telegram-webhook.mjs register https://YOUR-PRODUCTION-ORIGIN` and `node scripts/telegram-webhook.mjs status`. The helper leaves a webhook pointing elsewhere in place. Send `/add 12.50 Test lunch | Food` in your private bot chat and verify one matching row in the dashboard.
 5. Gemini starts paused. After confirming the project is Free with no billing account, set `GEMINI_DAILY_REQUEST_LIMIT` to a positive number at or below the displayed daily quota and at most 10. The app also spaces requests 15 seconds apart. Restart or redeploy for the change. Test `/ai Yesterday spent 25 on a fictional lunch` with synthetic data and tap **Save expenses**. Tap again and verify a single expense. Keep using `/add` or the dashboard for sensitive entries.
 
-The Telegram integration uses webhooks. Text edits and voids use the dashboard. Gemini clarifications ask for a revised complete message. The plain and structured synthetic probes for Gemini 3.5 Flash-Lite returned HTTP 200. The configured local cap is 10/day against the owner-confirmed Free project quota of 500/day. Browser installation and production Telegram and scheduler delivery remain to be checked.
+The Telegram integration uses webhooks. Text edits and voids use the dashboard. Gemini clarifications ask for a revised complete message. The local and owner-confirmed production cap is 10/day against the unbilled project's Free quota of 500/day. The owner verified real Telegram delivery. An automated production probe verified scheduled queue processing and an AI confirmation replay. See [the checklist](CHECKLIST.md) for the remaining release checks.

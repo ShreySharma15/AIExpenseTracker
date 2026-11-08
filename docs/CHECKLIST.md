@@ -20,9 +20,11 @@ Checked items represent work actually completed, not intended features.
 - [x] Gemini 3.5 Flash-Lite plain text and structured JSON returned HTTP 200. Each response had one candidate, one visible text part with a thought signature, finish reason STOP, and no Google error. The app schema accepted the synthetic ₹250 expense as 25,000 paise.
 - [x] Owner confirmed Gemini 3.5 Flash-Lite quota of 15 RPM, 250,000 TPM, and 500 RPD in the unbilled Free project. Configured the local cap to 10 RPD.
 - [x] Configured the GitHub remote and verified the existing default branch is `main`.
-- [ ] Confirm GitHub repository visibility is private and verify the push.
+- [x] Owner explicitly approved public GitHub visibility. Audited and pushed the initial commit with GitHub noreply metadata, then verified origin/main.
 
 ## Phase 1 — Text entry and monthly dashboard
+
+**Release status: BLOCKED.** The core production flows passed. The recorded Supabase scheduler HTTP result and the remaining Phase 1 checklist items still need evidence before this gate can close.
 
 ### Milestone 1A: Foundation
 
@@ -46,7 +48,7 @@ Gate: local checks and database integration tests pass before Telegram feature w
 - [ ] Clarifications currently request a complete revised message. Telegram edit, cancel and undo commands remain pending.
 - [x] Implement durable inbox and reply delivery with expiring leases, retries and deduplication. Local database tests exercise recovery, stale leases, reply retries and the scheduler SQL with test stubs.
 - [x] Hosted recovery migration 003 verified. Synthetic recovery exercised inbox deduplication, exclusive lease, stale lease rejection, outbox delivery stage and terminal scrubbing.
-- [ ] Activate and verify the recovery scheduler after Vercel deployment.
+- [x] Owner enabled the recovery schedule. A directly enqueued synthetic job reached `done` automatically in 35 seconds, with the reply delivered and the payload scrubbed.
 - [x] Pin gemini-3.5-flash-lite. The example defaults to paused and the verified local environment is capped at 10 requests/day.
 - [x] Verified owner-reported Free quota and local quota exhaustion and provider 429 handling. Live synthetic Gemini parsing, hosted confirmation and duplicate confirmation, and manual fallback passed. The synthetic expense was voided.
 - [ ] Minimize/pseudonymize permitted AI input; sensitive entries use the non-AI path; initial API tests use synthetic data.
@@ -60,7 +62,8 @@ Gate: authorized Telegram messages save once; unauthorized messages cannot read/
 ### Milestone 1C: Dashboard and release
 
 - [x] Owner-only dashboard verified with a temporary hosted Supabase session, then revoked. Anonymous access redirects and public signup is disabled.
-- [ ] Owner password form, browser logout and session expiry still need a browser check.
+- [x] Owner confirmed production password sign-in and browser logout.
+- [ ] Verify browser session expiry separately.
 - [x] Implement mobile dashboard, transaction list/edit, search, month/category filters and pagination.
 - [x] Implement monthly personal totals, gross payments, category breakdown, and previous full-month comparison.
 - [x] Four-section dashboard navigation, including a Phase 2 placeholder for people and groups.
@@ -69,7 +72,14 @@ Gate: authorized Telegram messages save once; unauthorized messages cannot read/
 - [ ] Playwright flow: login -> Telegram entry -> month total -> edit -> void -> logout.
 - [x] Six automated tests, lint, type checking and the production build passed. Local HTTP tests verified the authenticated dashboard, filters, revision history, private caching and rejected webhook requests.
 - [ ] Browser-based visual and production end-to-end checks remain pending.
-- [ ] Owner will import and deploy on Vercel. Production owner sign-in, Telegram webhook round trip and scheduler HTTP delivery remain pending.
+- [x] Owner deployed to Vercel. Production login page, anonymous dashboard redirect, and no-store owner dashboard verified.
+- [x] Production dashboard opened with a temporary hosted owner session. RLS, create/edit/void actions, movement between monthly totals, filters, revision history, and the production sign-out action passed. The synthetic expense was voided.
+- [x] Registered the production Telegram webhook. Telegram reported no pending updates or recorded delivery errors. Production rejected a missing webhook secret. A signed synthetic replay delivered a bot reply and produced one expense, which was voided.
+- [x] Owner confirmed real Telegram expense creation. The Telegram API independently reported the exact production webhook URL and zero queued updates.
+- [x] Owner confirmed a real Gemini draft and confirmation, and verified the Vercel Production cap of 10/day. The scheduled synthetic probe produced the expected draft without a ledger write before confirmation. Replaying confirmation returned the same expense ID. The synthetic expense was voided.
+- [x] Production recovery endpoint rejected unauthenticated calls and returned HTTP 200 with the existing scheduler secret.
+- [x] Owner confirmed both Supabase Vault entries and the scheduled job were configured. Automatic recovery passed the synthetic queue probe.
+- [ ] Inspect the scheduled pg_net HTTP status and verify the Vault destination against the production endpoint using the read-only queries in SETUP.md. Application credentials do not grant access to Cron, Vault, or pg_net logs.
 - [ ] Phase 2 is gated on the production Phase 1 checks.
 - [ ] Verify backups/restoration, monitoring and recovery runbook.
 
