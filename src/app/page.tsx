@@ -102,6 +102,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
               <p className="text-sm text-slate-600">{row.occurred_on} · {row.category}{row.coverage ? " · " + row.coverage : ""}</p>
             </div><strong className="shrink-0">{formatPaise(BigInt(row.paise))}</strong></div>
             <details className="mt-2"><summary className="cursor-pointer text-sm font-semibold text-emerald-800">Edit or void</summary>
+              <p className="mt-2 break-all text-xs text-slate-600">Expense ID {row.id} · version {row.version}</p>
               <div className="mt-3"><ExpenseForm row={row} today={today} month={month} /></div>
               <form action={saveExpense} className="mt-3">
                 <input type="hidden" name="month" value={month} /><input type="hidden" name="id" value={row.id} /><input type="hidden" name="version" value={row.version} />

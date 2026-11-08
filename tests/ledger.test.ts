@@ -21,6 +21,7 @@ test("expense batches are atomic, idempotent, isolated and reversible", async ()
     await db.exec(await readFile(new URL("../supabase/migrations/202611080001_expenses.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/202611080002_ai_quota.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/202611080003_telegram_recovery.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/202611090004_telegram_corrections.sql", import.meta.url), "utf8"));
     const owner = "10000000-0000-4000-8000-000000000001";
     const other = "20000000-0000-4000-8000-000000000002";
     await db.query("insert into auth.users values ($1),($2)", [owner, other]);
@@ -49,6 +50,7 @@ test("expense batches are atomic, idempotent, isolated and reversible", async ()
     await assert.rejects(db.query("select public.reserve_ai_request($1,'draft',1)", [other]));
     await assert.rejects(db.query("select * from public.claim_telegram_job(123, null)"));
     await assert.rejects(db.query("select * from public.telegram_jobs"));
+    await assert.rejects(db.query("select public.correct_telegram_expense($1,'edit',$2,1,null)", [owner, first[0]]));
     await db.exec("reset role; set role service_role; select set_config('request.jwt.claim.role', 'service_role', false)");
     assert.deepEqual((await db.query("select public.reserve_ai_request($1,'draft',1) as status", [owner])).rows, [{ status: "reserved" }]);
     assert.deepEqual((await db.query("select public.reserve_ai_request($1,'draft',1) as status", [owner])).rows, [{ status: "duplicate" }]);
@@ -64,6 +66,28 @@ test("expense batches are atomic, idempotent, isolated and reversible", async ()
     const saved = (await db.query(confirm, [owner, drafts[0].id])).rows;
     assert.deepEqual((await db.query(confirm, [owner, drafts[0].id])).rows, saved);
     assert.equal((await db.query("select * from public.active_expenses")).rows.length, 1);
+    const target = (await db.query<{ id: string }>("select id from public.active_expenses")).rows[0].id;
+    const correct = "select public.correct_telegram_expense($1,$2,$3,$4,$5::jsonb) as version";
+    assert.deepEqual((await db.query(correct, [other, "foreign", target, 1, null])).rows, [{ version: null }]);
+    const editArgs = [owner, "edit", target, 1, JSON.stringify({ ...item, paise: "1200" })];
+    assert.deepEqual((await db.query(correct, editArgs)).rows, [{ version: 2 }]);
+    assert.deepEqual((await db.query(correct, editArgs)).rows, [{ version: 2 }]);
+    await assert.rejects(db.query(correct, [owner, "stale", target, 1, null]));
+    const undoArgs = [owner, "undo", target, 2, null];
+    assert.deepEqual((await db.query(correct, undoArgs)).rows, [{ version: 3 }]);
+    assert.deepEqual((await db.query(correct, undoArgs)).rows, [{ version: 3 }]);
+    assert.equal((await db.query("select id from public.active_expenses")).rows.length, 0);
+    const cancel = "select public.cancel_ai_draft($1,$2) as closed";
+    assert.deepEqual((await db.query(cancel, [owner, drafts[0].id])).rows, [{ closed: false }]);
+    await db.exec("reset role; insert into public.ai_requests(owner_id,source_key,quota_date) select id,'cancel-test',current_date from auth.users where id = '10000000-0000-4000-8000-000000000001'; set role service_role");
+    const cancelled = (await db.query<{ id: string }>(
+      "insert into public.ai_expense_drafts(owner_id,source_key,items) values ($1,'cancel-test',$2) returning id",
+      [owner, JSON.stringify([item])],
+    )).rows[0].id;
+    assert.deepEqual((await db.query(cancel, [other, cancelled])).rows, [{ closed: true }]);
+    assert.equal((await db.query("select id from public.ai_expense_drafts where id=$1", [cancelled])).rows.length, 1);
+    for (let i = 0; i < 2; i++) assert.deepEqual((await db.query(cancel, [owner, cancelled])).rows, [{ closed: true }]);
+    assert.deepEqual((await db.query(confirm, [owner, cancelled])).rows, [{ ids: null }]);
     await db.exec(`
       insert into public.telegram_jobs(bot_id,update_id,payload) values (123,456,'{"update_id":456}');
       insert into public.telegram_jobs(bot_id,update_id,payload) values (123,456,'{"update_id":456}') on conflict do nothing;
@@ -121,6 +145,19 @@ test("expense batches are atomic, idempotent, isolated and reversible", async ()
     await db.exec(scheduleRow.command);
     assert.deepEqual((await db.query("select headers->>'Authorization' as auth from net.calls")).rows,
       [{ auth: "Bearer test-only-value" }]);
+
+    const summaryBefore = await db.query("select expense_id, version, action, paise from public.expense_revisions order by expense_id, version");
+    const backup = await db.dumpDataDir();
+    const restored = new PGlite({ loadDataDir: backup });
+    try {
+      assert.deepEqual((await restored.query("select expense_id, version, action, paise from public.expense_revisions order by expense_id, version")).rows, summaryBefore.rows);
+      assert.deepEqual((await restored.query("select stage, payload, reply from public.telegram_jobs")).rows,
+        [{ stage: "done", payload: null, reply: null }]);
+      await restored.exec("set role anon");
+      await assert.rejects(restored.query("select * from public.active_expenses"));
+    } finally {
+      await restored.close();
+    }
   } finally {
     await db.close();
   }

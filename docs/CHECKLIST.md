@@ -24,7 +24,7 @@ Checked items represent work actually completed, not intended features.
 
 ## Phase 1 — Text entry and monthly dashboard
 
-**Release status: BLOCKED.** The core production flows passed. The recorded Supabase scheduler HTTP result and the remaining Phase 1 checklist items still need evidence before this gate can close.
+**Release status: BLOCKED.** The core production flows and scheduled recovery passed. Migration 004 and the updated Telegram and PWA behavior still need production smoke checks. The remaining unchecked release items also require evidence.
 
 ### Milestone 1A: Foundation
 
@@ -45,7 +45,8 @@ Gate: local checks and database integration tests pass before Telegram feature w
 - [x] grammY private-chat owner checks and webhook-secret verification.
 - [x] Structured parser for single/multiple personal expenses, explicit dates, today and yesterday.
 - [x] Coverage metadata, persisted Gemini confirmation drafts, and dashboard edit/void history.
-- [ ] Clarifications currently request a complete revised message. Telegram edit, cancel and undo commands remain pending.
+- [x] Implement owner-only Telegram `/edit` and `/undo` with explicit ID and version, an idempotent mutation record, and a Cancel button for unconfirmed drafts. Tests cover cross-owner access, stale versions and replay. Clarifications request a complete revised message.
+- [ ] Apply migration 004 and verify edit, undo and cancellation against a synthetic production expense.
 - [x] Implement durable inbox and reply delivery with expiring leases, retries and deduplication. Local database tests exercise recovery, stale leases, reply retries and the scheduler SQL with test stubs.
 - [x] Hosted recovery migration 003 verified. Synthetic recovery exercised inbox deduplication, exclusive lease, stale lease rejection, outbox delivery stage and terminal scrubbing.
 - [x] Owner enabled the recovery schedule. A directly enqueued synthetic job reached `done` automatically in 35 seconds, with the reply delivered and the payload scrubbed.
@@ -67,10 +68,11 @@ Gate: authorized Telegram messages save once; unauthorized messages cannot read/
 - [x] Implement mobile dashboard, transaction list/edit, search, month/category filters and pagination.
 - [x] Implement monthly personal totals, gross payments, category breakdown, and previous full-month comparison.
 - [x] Four-section dashboard navigation, including a Phase 2 placeholder for people and groups.
-- [ ] Installable PWA metadata/icons/offline shell; no sensitive caching.
+- [x] Local production build passed Chromium installability checks in a disposable profile. Offline navigation to login and the dashboard showed the static shell, reconnect restored sign-in, and Cache Storage contained only the public offline shell.
+- [ ] Install and open the updated production PWA on the target device, then verify the offline screen after disconnecting.
 - [ ] Accessible labels, keyboard navigation, responsive layout, empty/error/loading states.
 - [ ] Playwright flow: login -> Telegram entry -> month total -> edit -> void -> logout.
-- [x] Six automated tests, lint, type checking and the production build passed. Local HTTP tests verified the authenticated dashboard, filters, revision history, private caching and rejected webhook requests.
+- [x] Seven automated tests, lint, type checking and the production build passed. Local HTTP tests verified the authenticated dashboard, filters, revision history, private caching and rejected webhook requests.
 - [ ] Browser-based visual and production end-to-end checks remain pending.
 - [x] Owner deployed to Vercel. Production login page, anonymous dashboard redirect, and no-store owner dashboard verified.
 - [x] Production dashboard opened with a temporary hosted owner session. RLS, create/edit/void actions, movement between monthly totals, filters, revision history, and the production sign-out action passed. The synthetic expense was voided.
@@ -79,9 +81,10 @@ Gate: authorized Telegram messages save once; unauthorized messages cannot read/
 - [x] Owner confirmed a real Gemini draft and confirmation, and verified the Vercel Production cap of 10/day. The scheduled synthetic probe produced the expected draft without a ledger write before confirmation. Replaying confirmation returned the same expense ID. The synthetic expense was voided.
 - [x] Production recovery endpoint rejected unauthenticated calls and returned HTTP 200 with the existing scheduler secret.
 - [x] Owner confirmed both Supabase Vault entries and the scheduled job were configured. Automatic recovery passed the synthetic queue probe.
-- [ ] Inspect the scheduled pg_net HTTP status and verify the Vault destination against the production endpoint using the read-only queries in SETUP.md. Application credentials do not grant access to Cron, Vault, or pg_net logs.
+- [x] Read-only SQL Editor check confirmed the active one-minute Cron job, the exact production recovery destination, and a scheduled HTTP 200 at 01:04 IST on November 9, 2026. The query displayed only booleans and a timestamp.
 - [ ] Phase 2 is gated on the production Phase 1 checks.
-- [ ] Verify backups/restoration, monitoring and recovery runbook.
+- [x] Isolated backup/restore test exported a synthetic PGlite database, restored it into a new database, and verified ledger history, terminal queue state, and denial of anonymous reads. No production data was used.
+- [ ] Verify production backup availability and monitoring against the recovery runbook.
 
 Gate: report exact tests and live verification results. Complete Phase 1 before implementing Phase 2.
 

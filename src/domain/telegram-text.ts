@@ -1,6 +1,22 @@
 import { localDate } from "./dates.ts";
 import { categories, expenseItem } from "./expense.ts";
 
+export function parseTelegramCorrection(input: string, instant: Date) {
+  const match = /^\/(edit|undo)(?:@\w+)?\s+([\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12})\s+([1-9]\d{0,8})(?:\s+(.+))?$/i.exec(input);
+  if (!match) throw new Error("Provide the expense ID and version.");
+  const [, command, id, version, text] = match;
+  if (command.toLowerCase() === "undo") {
+    if (text) throw new Error("Undo takes only an expense ID and version.");
+    return { id, version: Number(version), item: null };
+  }
+  if (!text || !/^\d{4}-\d{2}-\d{2}\s/.test(text) || !text.includes("|")) {
+    throw new Error("Edit requires the full replacement including date and category.");
+  }
+  const items = parseExpenseMessage(text, instant);
+  if (items.length !== 1) throw new Error("Edit one expense at a time.");
+  return { id, version: Number(version), item: items[0] };
+}
+
 export function parseExpenseMessage(message: string, instant: Date) {
   const explicit = /^\/add(?:@\w+)?\s+/i.test(message);
   const command = message.replace(/^\/add(?:@\w+)?\s+/i, "");

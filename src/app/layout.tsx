@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PwaRegistration } from "./pwa-registration";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return <html lang="en-IN"><body>{children}</body></html>;
+  return <html lang="en-IN"><body>{children}<PwaRegistration /></body></html>;
 }

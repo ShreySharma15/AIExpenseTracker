@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { formatPaise, parsePaise } from "../src/domain/money.ts";
 import { isCalendarDate, localDate, monthRange } from "../src/domain/dates.ts";
-import { parseExpenseMessage } from "../src/domain/telegram-text.ts";
+import { parseExpenseMessage, parseTelegramCorrection } from "../src/domain/telegram-text.ts";
 
 test("money is exact and rejects excess precision, zero and unsupported notation", () => {
   assert.equal(parsePaise("123.04"), 12304n);
@@ -31,4 +31,17 @@ test("Telegram entries preserve paise, relative dates and coverage", () => {
   assert.throws(() => parseExpenseMessage("/add 2026-02-30 300 lunch", received));
   assert.throws(() => parseExpenseMessage("Spent 1200 on dinner split equally", received));
   assert.equal(parseExpenseMessage("Yesterday 150 auto and 200 groceries", received).length, 2);
+});
+
+test("Telegram corrections require a target, version, and a complete replacement", () => {
+  const id = "10000000-0000-4000-8000-000000000001";
+  const now = new Date("2026-11-09T12:00:00Z");
+  assert.deepEqual(parseTelegramCorrection(`/undo ${id} 2`, now), { id, version: 2, item: null });
+  const edit = parseTelegramCorrection(`/edit ${id} 1 2026-11-08 15.25 lunch | Food`, now);
+  assert.equal(edit.item?.paise, "1525");
+  assert.equal(edit.item?.occurred_on, "2026-11-08");
+  for (const input of [`/edit ${id} 1 15 lunch | Food`, `/undo ${id} 0`, `/undo ${id} 2 extra`,
+    `/edit ${id} 1 2026-11-08 15 lunch | Food; 30 taxi | Transport`]) {
+    assert.throws(() => parseTelegramCorrection(input, now));
+  }
 });
