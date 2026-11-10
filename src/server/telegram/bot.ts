@@ -7,6 +7,8 @@ import { configuredAiLimit, interpretExpense } from "@/server/ai/gemini";
 import { botClient } from "@/lib/supabase/server";
 import { reportEvent } from "@/server/monitoring";
 import { prepareAiInput } from "@/domain/ai-input";
+import { phase2Enabled } from "@/server/phase2";
+import { finishPhase2Message, stagePhase2Message } from "./phase2";
 
 const help = "Add an expense with /add 250 lunch | Food. For several expenses, separate entries with a semicolon. Prefix an entry with yesterday or a date. Use /ai followed by non-sensitive text to request Gemini parsing.";
 const correctionHelp = "Use /edit ID VERSION YYYY-MM-DD 250 lunch | Food or /undo ID VERSION. Copy the ID and version from the saved expense or dashboard.";
@@ -28,6 +30,12 @@ function makeHandler(token: string) {
   });
   bot.command(["start", "help"], async ctx => { await ctx.reply(help); });
   bot.on("edited_message:text", async ctx => { await ctx.reply(correctionHelp); });
+  bot.callbackQuery(/^p2_(save|cancel):([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/, async ctx => {
+    if (!phase2Enabled()) { await ctx.answerCallbackQuery("Shared entries are unavailable."); return; }
+    const owner = process.env.APP_OWNER_USER_ID;
+    if (!owner) throw new Error("Owner configuration unavailable");
+    await ctx.answerCallbackQuery(await finishPhase2Message(owner,ctx.match[2],ctx.match[1] === "cancel"));
+  });
   bot.callbackQuery(/^cancel:([0-9a-f-]{36})$/, async ctx => {
     const owner = process.env.APP_OWNER_USER_ID;
     if (!owner) throw new Error("Owner configuration unavailable");
@@ -51,6 +59,14 @@ function makeHandler(token: string) {
     const db = botClient();
     const source = `telegram:${ctx.me.id}:${ctx.chat.id}:${ctx.message.message_id}`;
     const instant = new Date(ctx.message.date * 1000);
+    if (phase2Enabled()) {
+      const draft = await stagePhase2Message(owner,source,input,instant);
+      if (draft) {
+        await ctx.reply(draft.text, draft.id ? { reply_markup:new InlineKeyboard()
+          .text("Save entry","p2_save:"+draft.id).text("Cancel","p2_cancel:"+draft.id) } : undefined);
+        return;
+      }
+    }
     if (/^\/(?:edit|undo)(?:@\w+)?(?:\s|$)/i.test(input)) {
       let correction;
       try { correction = parseTelegramCorrection(input, instant); }

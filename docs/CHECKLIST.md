@@ -93,13 +93,18 @@ Gate: report exact tests and live verification results. Complete Phase 1 before 
 
 ## Phase 2 — People, splits and debts
 
-- [ ] Saved people and aliases; optional reusable groups; ad hoc participants.
-- [ ] Equal/unequal splits; self or another person as payer; personal-share-only mode.
-- [ ] Loan/borrowing recording, obligations, partial/full repayments, explicit settlements.
-- [ ] People balance cards and per-person expense/loan/repayment history.
-- [ ] Reversal and deletion rules for entries with dependent settlements.
-- [ ] Tests: 100 paise / 3 participants; unequal allocations; different payer; opposite debts; overpayment; concurrent repayments; settled-expense edits; balance reconstruction.
-- [ ] End-to-end fixtures reproduce the accounting examples in ARCHITECTURE.md.
+**Status: implemented locally. Production rollout requires approval.**
+
+- [x] Saved contacts and aliases, reusable groups, and one-time participants with owner-scoped access.
+- [x] Equal splits and unequal splits by exact amount, integer weight, or percentage. One payer per expense. A personal-share-only entry uses the personal ledger.
+- [x] Lending, borrowing, partial and full repayment, and explicit same-person settlements, including equal netting allocations.
+- [x] Per-person balances, obligation and settlement history, category and month totals, and separate cash paid and received. Loans and repayments contribute zero personal spending.
+- [x] Audit-preserving shared expense replacement and voids. Active linked settlements must be reversed before the source can change.
+- [x] Deterministic Telegram drafts for the documented equal-split, loan, and unambiguous repayment phrases, with save/cancel and deduplication. Ambiguous contacts and multiple eligible debts require clarification.
+- [x] Isolated database fixtures cover 100 paise divided among three, unequal splits, different payers, group membership snapshots, opposite debts, overpayment, competing repayments, settled-expense edits, owner isolation, and reconciliation.
+- [x] Ledger fixtures reproduce the shared expense and loan examples in ARCHITECTURE.md.
+- [x] Isolated Chromium smoke verified anonymous redirect, the owner dashboard, the 34/33/33 paise split preview, and integer values sent to the split RPC fixture.
+- [ ] Approve production deployment, apply migrations 005–009, enable the Phase 2 flag, and run the [production smoke checks](SETUP.md#phase-2-isolated-verification-and-release).
 
 Gate: shares sum exactly, journal entries balance, debt balances reconcile after edits and repayments, loans never affect spending.
 

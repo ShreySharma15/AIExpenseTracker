@@ -1,6 +1,6 @@
 # Architecture and database design
 
-Status: Phase 1 implementation underway. The schema below describes the planned full system.
+Status: Phase 1 complete. Phase 2 implementation is gated by `EXPENSE_PHASE_2_ENABLED`. The design table below describes the full system.
 
 ## Decisions
 
@@ -77,7 +77,9 @@ docs/
 .env.example
 ```
 
-The first migrations implement a smaller personal expense ledger. The expenses table holds stable identities. Expense revisions are immutable. The expense_postings view derives balanced cash and expense legs from revision history. AI request and draft tables enforce quota and explicit confirmation. Shared obligations, durable update recovery and reminders remain planned.
+Phase 1 keeps its personal ledger and durable Telegram inbox. Phase 2 adds owner-scoped address-book tables and a separate shared/debt ledger. `phase2_events` holds immutable entries. Shared allocations retain participant names and integer shares. `phase2_obligations` and `phase2_settlements` record the debt and explicit repayment allocations. `phase2_voids` reverses postings, and a replacement links to its original entry. The home report combines personal expense amounts and the owner's share of shared entries while counting loans and repayments only in cash flow. Balances and reconciliation derive from ledger rows.
+
+An advisory transaction lock serializes Phase 2 writes per owner. Database functions recalculate splits, validate available balances and forbid replacing or voiding sources with active settlements. Reverse linked settlements first to correct the source. Reversals preserve the effective date and the time they were recorded. Dashboard writes derive the owner from Supabase Auth. A separate service-only Telegram draft interface accepts only the verified bot owner's scope, resolves names and aliases locally, and writes only after confirmation. Unequal splits, ambiguous repayments and net settlements use the dashboard.
 
 ## Database design
 

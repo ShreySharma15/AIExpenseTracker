@@ -6,6 +6,7 @@ import { formatPaise } from "@/domain/money";
 import { saveExpense } from "./actions";
 import { signOut } from "./login/actions";
 import { Button } from "@/components/ui/button";
+import { phase2Enabled } from "@/server/phase2";
 
 type Expense = {
   id: string; version: number; description: string; paise: string; category: string;
@@ -14,6 +15,7 @@ type Expense = {
 type Revision = Pick<Expense, "version" | "description" | "occurred_on"> & {
   expense_id: string; recorded_at: string; action: "create" | "edit" | "void"; paise_text: string;
 };
+type SharedMonth = { category: string | null; personal: string; paid: string; received: string };
 
 function ExpenseForm({ month, row, today }: { month: string; row?: Expense; today: string }) {
   const amount = row ? (BigInt(row.paise) / 100n).toString() + "." + row.paise.padStart(2, "0").slice(-2) : undefined;
@@ -38,6 +40,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
     try { monthRange(params.month); month = params.month; } catch { /* Default to the current month. */ }
   }
   const [start, end] = monthRange(month);
+  const sharedEnabled = phase2Enabled();
   const previousEnd = new Date(start + "T00:00:00Z");
   previousEnd.setUTCDate(0);
   const previousStart = previousEnd.toISOString().slice(0, 7) + "-01";
@@ -48,18 +51,32 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
     .eq("owner_id", owner).gte("occurred_on", start).lt("occurred_on", end);
   if (category) rowsQuery = rowsQuery.eq("category", category);
   if (search) rowsQuery = rowsQuery.ilike("description", "%" + search.replace(/[\\%_*]/g, "\\$&") + "%");
-  const [report, previousReport, rows, audit] = await Promise.all([
+  const [report, previousReport, rows, audit, shared, previousShared] = await Promise.all([
     db.rpc("expense_summary", { p_owner: owner, p_start: start, p_end: end }),
     db.rpc("expense_summary", { p_owner: owner, p_start: previousStart, p_end: start }),
     rowsQuery.order("occurred_on", { ascending: false }).order("recorded_at", { ascending: false }).order("id").range(page * 25, page * 25 + 24),
     db.from("expense_revisions").select("expense_id,version,action,occurred_on,description,recorded_at,paise_text:paise::text")
       .gte("occurred_on", start).lt("occurred_on", end).order("recorded_at", { ascending: false })
       .order("expense_id").order("version", { ascending: false }).limit(25),
+    sharedEnabled ? db.rpc("phase2_month", { p_start: start, p_end: end }) : null,
+    sharedEnabled ? db.rpc("phase2_month", { p_start: previousStart, p_end: start }) : null,
   ]);
-  const totals = (report.data ?? []) as { category: string; total: string }[];
-  const total = totals.reduce((acc, row) => acc + BigInt(row.total), 0n);
+  const ordinary = (report.data ?? []) as { category: string; total: string }[];
+  const categoryTotals = new Map(ordinary.map(row => [row.category, BigInt(row.total)]));
+  const ordinaryTotal = ordinary.reduce((acc, row) => acc + BigInt(row.total), 0n);
+  const sharedRows = (shared?.data ?? []) as SharedMonth[];
+  for (const row of sharedRows) {
+    if (row.category && BigInt(row.personal) > 0n) {
+      categoryTotals.set(row.category, (categoryTotals.get(row.category) ?? 0n) + BigInt(row.personal));
+    }
+  }
+  const total = [...categoryTotals.values()].reduce((acc, amount) => acc + amount, 0n);
+  const paid = ordinaryTotal + sharedRows.reduce((acc, row) => acc + BigInt(row.paid), 0n);
+  const received = sharedRows.reduce((acc, row) => acc + BigInt(row.received), 0n);
+  const reportUnavailable = report.error || shared?.error;
   const previousTotal = ((previousReport.data ?? []) as { total: string }[])
-    .reduce((acc, row) => acc + BigInt(row.total), 0n);
+    .reduce((acc, row) => acc + BigInt(row.total), 0n)
+    + ((previousShared?.data ?? []) as SharedMonth[]).reduce((acc, row) => acc + BigInt(row.personal), 0n);
   const pageLink = (p: number) => "/?" + new URLSearchParams({ month, q: search, category: category ?? "", page: String(p) }).toString();
   return <main className="mx-auto max-w-5xl px-4 py-7 sm:px-8">
     <a href="#transactions" className="skip-link mb-3 inline-block font-semibold underline">Skip to transactions</a>
@@ -68,7 +85,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
       <form action={signOut}><Button type="submit" variant="outline">Sign out</Button></form>
     </header>
     <nav aria-label="Dashboard sections" className="mb-5 flex flex-wrap gap-4 text-sm font-semibold underline">
-      <a href="#home">Home</a><a href="#transactions">Transactions</a><a href="#insights">Insights</a><a href="#people">People &amp; groups</a>
+      <a href="#home">Home</a><a href="#transactions">Transactions</a><a href="#insights">Insights</a><a href={sharedEnabled ? "/people" : "#people"}>People &amp; groups</a>
     </nav>
     {(params.saved || params.invalid || params.failed || params.stale) && <p role="status" className="mb-4 rounded-xl bg-white p-3">
       {params.saved ? "Expense updated." : params.invalid ? "Check the date, amount and description." : params.stale ? "This expense changed. Review the current version and try again." : "Could not save the expense."}
@@ -76,12 +93,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
     <div className="grid items-start gap-5 md:grid-cols-[1fr_20rem]">
       <section id="home" className="rounded-3xl bg-emerald-950 p-6 text-white">
         <p className="text-sm text-emerald-100">Personal spending · {month}</p>
-        <p className="my-2 text-4xl font-bold">{report.error ? "Unavailable" : formatPaise(total)}</p>
-        <p className="text-sm text-emerald-100">Payments made {report.error ? "unavailable" : formatPaise(total)}</p>
+        <p className="my-2 text-4xl font-bold">{reportUnavailable ? "Unavailable" : formatPaise(total)}</p>
+        <p className="text-sm text-emerald-100">Payments made {reportUnavailable ? "unavailable" : formatPaise(paid)}</p>
+        {sharedEnabled && <p className="text-sm text-emerald-100">Cash received {shared?.error ? "unavailable" : formatPaise(received)}</p>}
         <div id="insights" className="mt-5 border-t border-white/20 pt-4">
           <h2 className="font-semibold">Insights</h2>
-          {!previousReport.error && <p className="mt-2 text-sm text-emerald-100">Previous calendar month · {formatPaise(previousTotal)}</p>}
-          {totals.length > 0 && <ul className="mt-3 space-y-2">{totals.map(row => <li key={row.category} className="flex justify-between gap-3"><span>{row.category}</span><span>{formatPaise(BigInt(row.total))}</span></li>)}</ul>}
+          {!previousReport.error && !previousShared?.error && <p className="mt-2 text-sm text-emerald-100">Previous calendar month · {formatPaise(previousTotal)}</p>}
+          {!reportUnavailable && categoryTotals.size > 0 && <ul className="mt-3 space-y-2">{[...categoryTotals].map(([name, amount]) =>
+            <li key={name} className="flex justify-between gap-3"><span>{name}</span><span>{formatPaise(amount)}</span></li>)}</ul>}
         </div>
       </section>
       <section className="rounded-3xl bg-white p-5 md:row-span-2">
@@ -131,7 +150,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
       </section>
       <section id="people" className="rounded-3xl bg-white p-5">
         <h2 className="mb-2 text-lg font-bold">People &amp; groups</h2>
-        <p className="text-sm text-slate-600">Shared expenses and debts are planned for Phase 2.</p>
+        {sharedEnabled ? <a href="/people" className="text-sm underline">Open shared expenses, loans and balances</a> :
+          <p className="text-sm text-slate-600">Shared expenses and debts are planned for Phase 2.</p>}
       </section>
     </div>
   </main>;

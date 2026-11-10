@@ -197,3 +197,18 @@ The Telegram integration uses webhooks. Gemini clarifications ask for a revised 
 - `gemini_quota` identifies the app's daily cap or a provider HTTP 429 through its `source` field. Use `/add` until quota resets. `gemini_unavailable` and `gemini_response_invalid` distinguish an upstream HTTP error from unusable output. Keep billing unlinked and the app cap at 10/day. Check quotas with mocks instead of exhausting the production quota for a test.
 - Logs contain only allowlisted status, source, stage, and attempt fields. For a safe production log smoke test, submit an authenticated malformed webhook request using the locally stored secret and confirm HTTP 400 plus `webhook_invalid_body` in Vercel Logs. Inspect Cron's scheduled HTTP result separately.
 - `/ai` replaces unrecognized words with placeholders and restores them locally in draft descriptions. It blocks common contact details, long identifiers, and explicit debt or split phrases. Amounts, dates, and common expense words still reach the Free-tier provider. Use `/add` or the dashboard for sensitive entries.
+
+## Phase 2 isolated verification and release
+
+Phase 2 is off by default. Run `npm test` to apply migrations in a disposable PGlite database and verify the accounting, authorization, and replay fixtures. To try the dashboard and bot locally, point the app at an isolated Supabase project with a synthetic owner and a separate test bot. Apply migrations 001 through 009 in order there, configure the test owner and bot, set `EXPENSE_PHASE_2_ENABLED=true`, and start the app. Use **People & groups** to manage contacts, aliases, saved groups, splits, loans and settlements.
+
+For a synthetic check, split ₹1 among yourself and two contacts. Verify ₹0.34, ₹0.33 and ₹0.33 in the shown order. Try a different payer, a partial repayment, and two opposite balances. Net only equal allocations for the same person. Void the settlement before replacing an expense with linked settlements. Check the per-person history, outstanding balances and reconciliation result. Use the dashboard's ordinary expense form to record only your share.
+
+In the isolated Telegram chat, try `Paid 1200 for dinner split equally between me, Person A, and Person B`, `Person A borrowed 500 from me`, `I borrowed 1000 from Person B`, or `Person A returned 200`. Use saved names or unique aliases, then confirm or cancel the draft. Equal splits preview the exact shares. Multiple matching contacts or debts require clarification. The dashboard handles unequal shares, multiple obligation allocations, netting, and audit corrections.
+
+After explicit production approval:
+
+1. Confirm a production backup is available. Apply [005 people and groups](../supabase/migrations/202611100005_people_groups.sql), [006 shared expenses](../supabase/migrations/202611100006_shared_expenses.sql), [007 debts and settlements](../supabase/migrations/202611100007_debts_settlements.sql), [008 reconciliation](../supabase/migrations/202611100008_reconciliation.sql), and [009 Telegram drafts](../supabase/migrations/202611100009_phase2_telegram_drafts.sql) in order. Apply each file once to the intended project.
+2. Set the server-only `EXPENSE_PHASE_2_ENABLED=true` in Vercel **Production** and redeploy the approved commit. Keep the existing owner, Telegram webhook, and Gemini settings. The new Telegram flow does not call Gemini.
+3. Verify an owner-only People & Groups session and a synthetic split, loan, and repayment in production. Verify one Telegram draft saves once, a cancelled draft saves nothing, and ledger totals reconcile. Void the synthetic repayment first, then its source.
+4. To pause the rollout, unset the flag and redeploy. Keep the additive migrations and all recorded audit history.
