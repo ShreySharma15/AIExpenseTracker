@@ -5,6 +5,8 @@ import { formatPaise } from "@/domain/money";
 import { parseExpenseMessage, parseTelegramCorrection } from "@/domain/telegram-text";
 import { configuredAiLimit, interpretExpense } from "@/server/ai/gemini";
 import { botClient } from "@/lib/supabase/server";
+import { reportEvent } from "@/server/monitoring";
+import { prepareAiInput } from "@/domain/ai-input";
 
 const help = "Add an expense with /add 250 lunch | Food. For several expenses, separate entries with a semicolon. Prefix an entry with yesterday or a date. Use /ai followed by non-sensitive text to request Gemini parsing.";
 const correctionHelp = "Use /edit ID VERSION YYYY-MM-DD 250 lunch | Food or /undo ID VERSION. Copy the ID and version from the saved expense or dashboard.";
@@ -64,6 +66,8 @@ function makeHandler(token: string) {
     }
     let items: ReturnType<typeof parseExpenseMessage>;
     if (/^\/ai(?:@\w+)?\s+/i.test(input)) {
+      const message = input.replace(/^\/ai(?:@\w+)?\s+/i, "");
+      if (!prepareAiInput(message)) { await ctx.reply("Use /add or the dashboard for sensitive details or unsupported entries."); return; }
       const limit = configuredAiLimit();
       if (!limit) { await ctx.reply("Gemini is paused. You can use /add or the dashboard."); return; }
       const { data: reservation, error } = await db.rpc("reserve_ai_request", { p_owner: owner, p_source: source, p_limit: limit });
@@ -77,20 +81,23 @@ function makeHandler(token: string) {
         return;
       }
       if (reservation !== "reserved") {
+        if (reservation === "daily_limit") reportEvent("gemini_quota", { source: "app" });
         await ctx.reply(reservation === "slow_down" ? "Wait briefly before another AI request, or use /add." : "AI quota reached. Use /add or the dashboard.");
         return;
       }
       let result: Awaited<ReturnType<typeof interpretExpense>>;
       try {
-        result = await interpretExpense(input.replace(/^\/ai(?:@\w+)?\s+/i, ""), localDate(instant));
+        result = await interpretExpense(message, localDate(instant));
       } catch {
+        reportEvent("gemini_response_invalid");
         await ctx.reply("Gemini could not interpret that entry. Use /add or try again later.");
         return;
       }
       if (result.kind !== "expenses") {
         const reply = result.kind === "clarify" ? result.text + "\nSend a complete revised entry when ready."
           : result.kind === "quota" ? "Gemini quota reached. Use /add or the dashboard."
-          : "Gemini is unavailable. Use /add or try again later.";
+            : result.kind === "manual" ? "Use /add or the dashboard for this entry."
+            : "Gemini is unavailable. Use /add or try again later.";
         await ctx.reply(reply);
         return;
       }

@@ -24,16 +24,16 @@ Checked items represent work actually completed, not intended features.
 
 ## Phase 1 — Text entry and monthly dashboard
 
-**Release status: BLOCKED.** The core production flows and scheduled recovery passed. Migration 004 and the updated Telegram and PWA behavior still need production smoke checks. The remaining unchecked release items also require evidence.
+**Release status: BLOCKED pending production monitoring verification.** Core production acceptance passed on November 10, 2026. The latest session, accessibility, and monitoring checks passed on a local production build.
 
 ### Milestone 1A: Foundation
 
-- [ ] Scaffold Next.js/TypeScript/Tailwind/shadcn project with compatible pinned dependencies.
+- [x] Next.js, TypeScript, Tailwind, and a shadcn/ui Button integrated with pinned dependencies. Production build passed.
 - [x] Config verifier, server-only database clients, lint/type/build checks, and CI workflow.
 - [x] Ledger migrations, baseline categories, owner configuration, RLS and transactional mutations.
 - [x] Implement paise parsing, dates, derived balanced postings, revisions, voiding, and batch idempotency.
 - [x] Test atomic batches, replay, RLS isolation, stale edits, reversals, draft confirmation, and the AI quota in local PostgreSQL.
-- [ ] Tests: invalid amounts/precision, overflow bounds, timezone/month boundaries, rollback, duplicate concurrent delivery, reversals, cross-owner access.
+- [x] Domain and database tests cover invalid precision, overflow, India month boundaries, rollback, repeated and competing correction calls, reversals, and owner isolation. Hosted queue and ledger replay checks verified duplicate delivery.
 
 Gate: local checks and database integration tests pass before Telegram feature work.
 
@@ -41,22 +41,24 @@ Gate: local checks and database integration tests pass before Telegram feature w
 
 ### Milestone 1B: Telegram text
 
-- [ ] Safe token/owner-ID discovery scripts; no credentials printed.
+- [x] Added marker-based private-chat discovery. The live run refused to poll the active production webhook. Setup verification confirmed the configured owner and chat without printing credentials.
 - [x] grammY private-chat owner checks and webhook-secret verification.
 - [x] Structured parser for single/multiple personal expenses, explicit dates, today and yesterday.
 - [x] Coverage metadata, persisted Gemini confirmation drafts, and dashboard edit/void history.
 - [x] Implement owner-only Telegram `/edit` and `/undo` with explicit ID and version, an idempotent mutation record, and a Cancel button for unconfirmed drafts. Tests cover cross-owner access, stale versions and replay. Clarifications request a complete revised message.
-- [ ] Apply migration 004 and verify edit, undo and cancellation against a synthetic production expense.
+- [x] Production migration 004 RPC responded. Real Telegram `/add`, `/edit` and `/undo` succeeded. The production dashboard showed one edited expense at version 2, then no active result with create v1, edit v2 and void v3 in history.
+- [x] Real Telegram AI draft showed **Cancel** and **Save expenses**. Cancel closed the draft, and Save on that same draft was rejected. The filtered production dashboard showed no entry. A targeted database check confirmed no draft or ledger revision remained. The first Gemini request was unavailable and one retry succeeded.
+- [x] Production replay of the original synthetic source returned its existing expense ID. Revision count remained three and the voided expense stayed inactive.
 - [x] Implement durable inbox and reply delivery with expiring leases, retries and deduplication. Local database tests exercise recovery, stale leases, reply retries and the scheduler SQL with test stubs.
 - [x] Hosted recovery migration 003 verified. Synthetic recovery exercised inbox deduplication, exclusive lease, stale lease rejection, outbox delivery stage and terminal scrubbing.
 - [x] Owner enabled the recovery schedule. A directly enqueued synthetic job reached `done` automatically in 35 seconds, with the reply delivered and the payload scrubbed.
 - [x] Pin gemini-3.5-flash-lite. The example defaults to paused and the verified local environment is capped at 10 requests/day.
 - [x] Verified owner-reported Free quota and local quota exhaustion and provider 429 handling. Live synthetic Gemini parsing, hosted confirmation and duplicate confirmation, and manual fallback passed. The synthetic expense was voided.
-- [ ] Minimize/pseudonymize permitted AI input; sensitive entries use the non-AI path; initial API tests use synthetic data.
+- [x] Gemini request tests verified unknown labels are replaced, common sensitive identifiers are blocked, and labels are restored locally. Synthetic inputs only for tests. Sensitive entries use the manual path.
 - [x] Add a structured non-AI entry command and reject recognizable loan and split messages on the plain text path.
 - [x] Add opt-in Gemini parsing, an expiring confirmation draft, and one save per draft.
 - [x] Test 3.5 response parsing, including thought parts and truncation, local draft confirmation, duplicate confirmation, and provider 429 handling.
-- [ ] Tests: malformed/refused AI response, injection-like input, unauthorized updates, missing payer/amount/date, multi-entry atomicity, retry after commit, concurrent edits.
+- [x] Tests cover malformed and refused output, pseudonymized instruction-like input, unauthorized updates, manual routing for debts and split/payer ambiguity, invalid amount/date output, atomic batches, replay after commit, and competing edits.
 
 Gate: authorized Telegram messages save once; unauthorized messages cannot read/write or invoke AI; ambiguous messages write nothing until resolved.
 
@@ -64,16 +66,16 @@ Gate: authorized Telegram messages save once; unauthorized messages cannot read/
 
 - [x] Owner-only dashboard verified with a temporary hosted Supabase session, then revoked. Anonymous access redirects and public signup is disabled.
 - [x] Owner confirmed production password sign-in and browser logout.
-- [ ] Verify browser session expiry separately.
+- [x] Playwright on the local production build verified logout clears the session cookie, protected navigation redirects, and an expired session with a revoked refresh token is denied.
 - [x] Implement mobile dashboard, transaction list/edit, search, month/category filters and pagination.
 - [x] Implement monthly personal totals, gross payments, category breakdown, and previous full-month comparison.
 - [x] Four-section dashboard navigation, including a Phase 2 placeholder for people and groups.
 - [x] Local production build passed Chromium installability checks in a disposable profile. Offline navigation to login and the dashboard showed the static shell, reconnect restored sign-in, and Cache Storage contained only the public offline shell.
-- [ ] Install and open the updated production PWA on the target device, then verify the offline screen after disconnecting.
-- [ ] Accessible labels, keyboard navigation, responsive layout, empty/error/loading states.
-- [ ] Playwright flow: login -> Telegram entry -> month total -> edit -> void -> logout.
-- [x] Seven automated tests, lint, type checking and the production build passed. Local HTTP tests verified the authenticated dashboard, filters, revision history, private caching and rejected webhook requests.
-- [ ] Browser-based visual and production end-to-end checks remain pending.
+- [x] Owner confirmed the deployed PWA offline smoke check.
+- [x] Playwright verified accessible labels and roles, keyboard order, visible focus, skip-link focus, login error, empty results, and 320px layout. Axe returned no configured WCAG A/AA violations on login and the dashboard.
+- [x] The production browser smoke covered actual Telegram entry, edits and voids. Hosted dashboard HTTP tests covered monthly totals. Playwright separately covered browser auth and logout. The flows were verified in separate runs.
+- [x] Nine automated tests, lint, type checking and the production build passed. Local HTTP tests verified the authenticated dashboard, filters, revision history, private caching and rejected webhook requests.
+- [x] Browser smoke test verified the production Telegram correction and draft controls plus the matching dashboard views. Database checks separately verified replay and ledger state.
 - [x] Owner deployed to Vercel. Production login page, anonymous dashboard redirect, and no-store owner dashboard verified.
 - [x] Production dashboard opened with a temporary hosted owner session. RLS, create/edit/void actions, movement between monthly totals, filters, revision history, and the production sign-out action passed. The synthetic expense was voided.
 - [x] Registered the production Telegram webhook. Telegram reported no pending updates or recorded delivery errors. Production rejected a missing webhook secret. A signed synthetic replay delivered a bot reply and produced one expense, which was voided.
@@ -82,9 +84,10 @@ Gate: authorized Telegram messages save once; unauthorized messages cannot read/
 - [x] Production recovery endpoint rejected unauthenticated calls and returned HTTP 200 with the existing scheduler secret.
 - [x] Owner confirmed both Supabase Vault entries and the scheduled job were configured. Automatic recovery passed the synthetic queue probe.
 - [x] Read-only SQL Editor check confirmed the active one-minute Cron job, the exact production recovery destination, and a scheduled HTTP 200 at 01:04 IST on November 9, 2026. The query displayed only booleans and a timestamp.
-- [ ] Phase 2 is gated on the production Phase 1 checks.
 - [x] Isolated backup/restore test exported a synthetic PGlite database, restored it into a new database, and verified ledger history, terminal queue state, and denial of anonymous reads. No production data was used.
-- [ ] Verify production backup availability and monitoring against the recovery runbook.
+- [x] Owner confirmed production backup availability.
+- [x] Implemented structured webhook, recovery, and Gemini warnings and the operations runbook. Local built-route smoke observed redacted webhook and terminal recovery warnings. Provider 429 and log redaction tests passed.
+- [ ] Verify the deployment emits the new warning in Vercel Production Logs. Do not exhaust the live Gemini quota to generate a warning.
 
 Gate: report exact tests and live verification results. Complete Phase 1 before implementing Phase 2.
 

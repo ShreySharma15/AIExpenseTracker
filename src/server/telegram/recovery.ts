@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { botClient } from "@/lib/supabase/server";
+import { reportEvent } from "@/server/monitoring";
 import { telegramReply } from "./bot";
 import { allowedTelegramUpdate, botId } from "./update";
 
@@ -57,7 +58,12 @@ export async function processTelegramJobs(update?: number) {
       p_reply: outcome.reply ?? null, p_delay: outcome.delay ?? 30 * 2 ** (job.attempts - 1),
     });
     if (finished.error || finished.data !== true) throw new Error("Telegram lease could not be finalized");
-    if (result === "failed") { failed++; console.error("Telegram job reached terminal failure"); }
+    if (result === "failed") {
+      failed++;
+      reportEvent("recovery_job_failed", { stage: job.stage, attempt: job.attempts });
+    } else if (result === "retry") {
+      reportEvent("recovery_job_retry", { stage: job.stage, attempt: job.attempts });
+    }
     processed++;
   }
   return { processed, failed };

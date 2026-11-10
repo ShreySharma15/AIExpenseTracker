@@ -1,4 +1,5 @@
 import { signIn } from "./actions";
+import { Button } from "@/components/ui/button";
 
 export default async function Login({ searchParams }: { searchParams: Promise<{ failed?: string }> }) {
   const { failed } = await searchParams;
@@ -10,7 +11,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
       <form action={signIn} className="grid gap-4">
         <label>Email<input name="email" type="email" autoComplete="username" maxLength={254} required /></label>
         <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
-        <button className="bg-emerald-950 text-white">Sign in</button>
+        <Button type="submit">Sign in</Button>
       </form>
     </div>
   </main>;

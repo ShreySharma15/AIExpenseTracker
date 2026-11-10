@@ -5,6 +5,7 @@ import { localDate, monthRange } from "@/domain/dates";
 import { formatPaise } from "@/domain/money";
 import { saveExpense } from "./actions";
 import { signOut } from "./login/actions";
+import { Button } from "@/components/ui/button";
 
 type Expense = {
   id: string; version: number; description: string; paise: string; category: string;
@@ -24,7 +25,7 @@ function ExpenseForm({ month, row, today }: { month: string; row?: Expense; toda
     <label>Date<input name="occurred_on" type="date" defaultValue={row?.occurred_on ?? today} required /></label>
     <label>Category<select name="category" defaultValue={row?.category ?? "Other"}>{categories.map(c => <option key={c}>{c}</option>)}</select></label>
     <label>Coverage (optional)<input name="coverage" defaultValue={row?.coverage ?? ""} maxLength={120} /></label>
-    <button name="action" value={row ? "edit" : "create"} className="col-span-2 bg-emerald-950 text-white">{row ? "Save changes" : "Add expense"}</button>
+    <Button type="submit" name="action" value={row ? "edit" : "create"} className="col-span-2">{row ? "Save changes" : "Add expense"}</Button>
   </form>;
 }
 
@@ -61,9 +62,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
     .reduce((acc, row) => acc + BigInt(row.total), 0n);
   const pageLink = (p: number) => "/?" + new URLSearchParams({ month, q: search, category: category ?? "", page: String(p) }).toString();
   return <main className="mx-auto max-w-5xl px-4 py-7 sm:px-8">
+    <a href="#transactions" className="skip-link mb-3 inline-block font-semibold underline">Skip to transactions</a>
     <header className="mb-6 flex items-center justify-between gap-3">
       <h1 className="text-2xl font-bold">Expense Tracker</h1>
-      <form action={signOut}><button className="border border-emerald-900/20">Sign out</button></form>
+      <form action={signOut}><Button type="submit" variant="outline">Sign out</Button></form>
     </header>
     <nav aria-label="Dashboard sections" className="mb-5 flex flex-wrap gap-4 text-sm font-semibold underline">
       <a href="#home">Home</a><a href="#transactions">Transactions</a><a href="#insights">Insights</a><a href="#people">People &amp; groups</a>
@@ -86,13 +88,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         <h2 className="mb-4 text-lg font-bold">New expense</h2>
         <ExpenseForm month={month} today={today} />
       </section>
-      <section id="transactions" className="rounded-3xl bg-white p-5">
-        <h2 className="mb-4 text-lg font-bold">Transactions</h2>
+      <section id="transactions" tabIndex={-1} aria-labelledby="transactions-title" className="min-w-0 rounded-3xl bg-white p-5">
+        <h2 id="transactions-title" className="mb-4 text-lg font-bold">Transactions</h2>
         <form className="mb-4 grid grid-cols-2 gap-3">
           <label>Month<input type="month" name="month" defaultValue={month} required /></label>
           <label>Category<select name="category" defaultValue={category ?? ""}><option value="">All categories</option>{categories.map(c => <option key={c}>{c}</option>)}</select></label>
           <label>Search<input name="q" defaultValue={search} maxLength={80} /></label>
-          <button className="self-end border border-emerald-900/20">Apply filters</button>
+          <Button type="submit" variant="outline" className="self-end">Apply filters</Button>
         </form>
         {rows.error ? <p role="alert">Expense data is unavailable. Check that the database migration has been applied.</p> :
           !rows.data.length ? <p>No matching expenses.</p> :
@@ -106,7 +108,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
               <div className="mt-3"><ExpenseForm row={row} today={today} month={month} /></div>
               <form action={saveExpense} className="mt-3">
                 <input type="hidden" name="month" value={month} /><input type="hidden" name="id" value={row.id} /><input type="hidden" name="version" value={row.version} />
-                <button name="action" value="void" className="border border-red-300 text-red-900">Void expense</button>
+                <Button type="submit" name="action" value="void" variant="destructive">Void expense</Button>
               </form>
             </details>
           </li>)}</ul>}

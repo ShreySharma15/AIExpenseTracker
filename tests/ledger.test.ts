@@ -70,8 +70,13 @@ test("expense batches are atomic, idempotent, isolated and reversible", async ()
     const correct = "select public.correct_telegram_expense($1,$2,$3,$4,$5::jsonb) as version";
     assert.deepEqual((await db.query(correct, [other, "foreign", target, 1, null])).rows, [{ version: null }]);
     const editArgs = [owner, "edit", target, 1, JSON.stringify({ ...item, paise: "1200" })];
-    assert.deepEqual((await db.query(correct, editArgs)).rows, [{ version: 2 }]);
-    assert.deepEqual((await db.query(correct, editArgs)).rows, [{ version: 2 }]);
+    const edits = await Promise.allSettled([
+      db.query(correct, editArgs), db.query(correct, editArgs),
+      db.query(correct, [owner, "competing-edit", target, 1, JSON.stringify({ ...item, paise: "1300" })]),
+    ]);
+    assert.deepEqual(edits.slice(0, 2).map(edit => edit.status === "fulfilled" ? edit.value.rows : null),
+      [[{ version: 2 }], [{ version: 2 }]]);
+    assert.equal(edits[2].status, "rejected");
     await assert.rejects(db.query(correct, [owner, "stale", target, 1, null]));
     const undoArgs = [owner, "undo", target, 2, null];
     assert.deepEqual((await db.query(correct, undoArgs)).rows, [{ version: 3 }]);
