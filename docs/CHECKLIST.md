@@ -24,7 +24,7 @@ Checked items represent work actually completed, not intended features.
 
 ## Phase 1 — Text entry and monthly dashboard
 
-**Release status: BLOCKED pending production monitoring verification.** Core production acceptance passed on November 10, 2026. The latest session, accessibility, and monitoring checks passed on a local production build.
+**Release status: COMPLETE.** Core production acceptance passed on November 10, 2026. Session, accessibility, and monitoring checks passed on a local production build. The owner verified the final monitoring event in Vercel Production. Phase 2 is ready to begin when authorized.
 
 ### Milestone 1A: Foundation
 
@@ -87,7 +87,7 @@ Gate: authorized Telegram messages save once; unauthorized messages cannot read/
 - [x] Isolated backup/restore test exported a synthetic PGlite database, restored it into a new database, and verified ledger history, terminal queue state, and denial of anonymous reads. No production data was used.
 - [x] Owner confirmed production backup availability.
 - [x] Implemented structured webhook, recovery, and Gemini warnings and the operations runbook. Local built-route smoke observed redacted webhook and terminal recovery warnings. Provider 429 and log redaction tests passed.
-- [ ] Verify the deployment emits the new warning in Vercel Production Logs. Do not exhaust the live Gemini quota to generate a warning.
+- [x] Owner verified the `webhook_invalid_body` warning in Vercel Production around 19:04:45 IST on November 10, 2026. The warning contained an actionable next step and exposed no payloads or secrets.
 
 Gate: report exact tests and live verification results. Complete Phase 1 before implementing Phase 2.
 
